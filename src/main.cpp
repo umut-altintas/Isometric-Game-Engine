@@ -1,15 +1,21 @@
 #include "raylib.h"
 #include "raymath.h"
 #include "iostream"
+#include "vector"
+#include "algorithm"
 
 const int FPS = 60;
 
 Vector2 screen_size = {800, 800};
 Vector2 screen_center = screen_size/2;
+std::vector<Vector2> cube_cells;
+bool needs_sort = false;
 
 // Cell shape changed to w = 2*h
 // TODO:
-// 1. Create a function that makes texture stay on fixed position.
+// 1. Make a save function that saves location of cubes.
+// Revise the function names and revise the draw_texture_floor function like draw_texture_cube function.
+// Make a objectHandler that draw different type of textures.
 // 2. Revise the UpdateCamera function and make it:
 //    -> if selected fixed_camera; camera can be see all the grid 
 //    -> if selected moving_camera; camera will follow the player
@@ -38,19 +44,7 @@ public:
     Vector2 decrement_on_i = {-iso_w/2, -iso_h/2}; // -1,0
     Vector2 decrement_on_j = {iso_w/2, -iso_h/2};  // 0,-1
     Rectangle cell_shape{};
-/*
-    Vector2 global_to_local_position(Vector2 mouse_position) {
-        float local_i = (mouse_position.x - axis_i) / iso_w + (mouse_position.y - axis_j) / iso_h;
-        float local_j = (mouse_position.y - axis_j) / iso_h - (mouse_position.x - axis_i) / iso_w;
 
-        if(round((local_i) < 0 || round(local_j) < 0) || (round(local_i) > grid_count-1 || round(local_j) > grid_count - 1)){
-            return{-1,-1};
-        }
-        else{
-            return {abs(round(local_i)), abs(round(local_j))};
-        }
-    }
-*/
 Vector2 global_to_local_position(Vector2 mouse_position) {
 
     float local_i = (mouse_position.x - axis_i) / iso_w + (mouse_position.y - axis_j) / iso_h;
@@ -149,22 +143,45 @@ void draw_texture_floor(Grid& grid, Camera2D& camera, Texture2D& texture, float 
         }
     }
 }
-void draw_texture_cube(Grid& grid, Camera2D& camera, Texture2D& texture, float scale) {
+
+void draw_texture_cube(Grid& grid, Vector2 local_position, Texture2D& texture, float scale) {
+
+    if (local_position.x >= 0 && local_position.y >= 0) {
+        Vector2 texture_position = grid.local_to_global_position(local_position);
+        texture_position.x -= grid.iso_w/2 ;
+        texture_position.y -= texture.height - grid.iso_h/2;
+        DrawTextureEx(texture, texture_position, 0, scale, WHITE);
+    }
+}
+
+void place_cube(Grid& grid, Camera2D& camera, std::vector<Vector2>& cube_cells){
     if (IsMouseButtonDown(MOUSE_BUTTON_RIGHT)) {
+
         Vector2 global_position = GetScreenToWorld2D(GetMousePosition(), camera);
         Vector2 local_position = grid.global_to_local_position(global_position);
 
         if (local_position.x >= 0 && local_position.y >= 0) {
-            Vector2 texture_position = grid.local_to_global_position(local_position);
-            texture_position.x -= grid.iso_w/2 ;
-            texture_position.y -= texture.height - grid.iso_h/2;
-            DrawTextureEx(texture, texture_position, 0, scale, WHITE);
+            // Check whether this cell already contains a cube
+            bool exists = false;
+            for (const Vector2& cell : cube_cells) {
+                if (cell.x == local_position.x && cell.y == local_position.y) {
+                    exists = true;
+                }
+            }
+
+            if (!exists) {
+                cube_cells.push_back(local_position);
+                needs_sort = true;
+            }
+
         }
+
     }
+
 }
 
 int main(){
-    InitWindow(screen_size.x, screen_size.y, "Kitchen Game");
+    InitWindow(screen_size.x, screen_size.y, "Isometric Game Engine");
     SetTargetFPS(FPS);
     Texture2D texture = LoadTexture("textures/black_cube.png");
     Grid grid = Grid();
@@ -188,8 +205,21 @@ int main(){
         grid.draw();
         ClearBackground(WHITE);
         UpdateCamera(camera, grid);
-        draw_texture_cube(grid, camera, texture, scale);
         
+        place_cube(grid, camera, cube_cells);
+        if(needs_sort){
+            std::sort(cube_cells.begin(), cube_cells.end(),
+                [](const Vector2& a, const Vector2& b) {
+                    return (a.x + a.y) < (b.x + b.y);
+                }
+            );
+            needs_sort = false;
+        }
+            
+        for (const Vector2& cell : cube_cells) {
+            draw_texture_cube(grid, cell, texture, scale);
+            }
+
         if(IsKeyPressed(KEY_UP)){
             grid.start_place = Vector2Add(grid.start_place, grid. decrement_on_i);
         }
